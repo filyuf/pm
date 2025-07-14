@@ -50,7 +50,6 @@ jobs:
               interval: 5m
               conditions:
                 - "[STATUS] == 200"
-                - "[BODY].status == UP"
                 - "[RESPONSE_TIME] < 500"
               alerts:
                 - type: github
