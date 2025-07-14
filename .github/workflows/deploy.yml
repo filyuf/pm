@@ -46,10 +46,11 @@ jobs:
 
           endpoints:
             - name: Leantime
-              url: "http://lks-alb-1352780882.us-east-1.elb.amazonaws.com/"
+              url: "http://lks-alb-1352780882.us-east-1.elb.amazonaws.com/dashboard/home"
               interval: 5m
               conditions:
                 - "[STATUS] == 200"
+                - "[BODY].status == UP"
                 - "[RESPONSE_TIME] < 500"
               alerts:
                 - type: github
