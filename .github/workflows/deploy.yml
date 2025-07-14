@@ -1,0 +1,104 @@
+name: Deployment Leantime - Gatus
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  Deploy-Leantime:
+    name: Deploy Leantime App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: task-definition/lks-leantime.json
+          service: lks-leantime-td-v2-service-8b5ehlcr
+          cluster: lks-oss-cluster
+          wait-for-service-stability: true
+          
+  Build-Gatus:
+    name: Build Gatus App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Config.yml
+        run: |
+          cat <<EOF > ./config/config.yaml
+          alerting:
+            github:
+              repository-url: "https://github.com/filyuf/pm"
+              token: ${{ secrets.TOKEN }}
+
+          endpoints:
+            - name: Leantime
+              url: "http://lks-alb-1352780882.us-east-1.elb.amazonaws.com/"
+              interval: 5m
+              conditions:
+                - "[STATUS] == 200"
+                - "[BODY].status == UP"
+                - "[RESPONSE_TIME] < 500"
+              alerts:
+                - type: github
+                  failure-threshold: 3
+                  success-threshold: 5
+                  send-on-resolved: true
+                  description: "Server down!!!!"
+          EOF
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 523288456181.dkr.ecr.us-east-1.amazonaws.com
+
+      - name: Build, tag, and push image to Amazon ECR
+        run: |
+          docker build -t lks-gatus .
+          docker tag lks-gatus:latest 523288456181.dkr.ecr.us-east-1.amazonaws.com/lks-gatus:latest
+          docker push 523288456181.dkr.ecr.us-east-1.amazonaws.com/lks-gatus:latest
+
+  Deploy-Gatus:
+    name: Deploy Gatus App
+    needs: Build-Gatus
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: task-definition/lks-gatus.json
+          service: lks-gatus-service-d6gb3uzc
+          cluster: lks-oss-cluster
+          wait-for-service-stability: true
+      
